@@ -2,6 +2,22 @@
 
 Este guia mostra como instalar e configurar o sistema Dublar em um servidor Linux.
 
+## ⚡ TL;DR - Início Rápido
+
+```bash
+git clone https://github.com/inematds/dublar.git
+cd dublar
+python3 -m venv venv
+source venv/bin/activate
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install -r requirements.txt
+python3 dublar.py video.mp4 --src_lang en --tgt_lang pt --tts bark --sync smart
+```
+
+**Os diretórios `dub_work/` e `dublado/` são criados AUTOMATICAMENTE - você não precisa criar nada!**
+
+---
+
 ## 1. Clonar o Repositório
 
 ```bash
@@ -202,25 +218,55 @@ deactivate
 
 ## Estrutura de Diretórios
 
-Após a instalação, você terá:
+### O que você precisa criar:
 ```
 dublar/
-├── venv/              # Ambiente virtual Python
-├── dub_work/          # Arquivos temporários (criado automaticamente)
-├── dublado/           # Vídeos dublados (saída)
-├── dublar.py          # Script principal
+├── venv/              # ✋ VOCÊ CRIA: python3 -m venv venv
+```
+
+### O que vem do GitHub (clone):
+```
+dublar/
+├── dublar.py          # Scripts Python
+├── dublar2.py
+├── dublar3.py
+├── dublar31.py
 ├── requirements.txt   # Dependências
 ├── test_*.py          # Scripts de teste
-└── *.md              # Documentação
+├── *.md              # Documentação
+├── *.bat              # Scripts Windows (ignore no Linux)
+└── .gitignore
 ```
+
+### O que é criado AUTOMATICAMENTE ao rodar:
+```
+dublar/
+├── dub_work/          # ✅ AUTO: Arquivos temporários de processamento
+│   ├── audio_src.wav      # Áudio extraído do vídeo
+│   ├── asr.srt            # Transcrição original
+│   ├── asr_trad.srt       # Tradução
+│   ├── seg_*.wav          # Segmentos de áudio
+│   ├── dub_raw.wav        # Áudio dublado antes do pós-processamento
+│   ├── dub_final.wav      # Áudio dublado final
+│   └── logs.json          # Log completo do processo
+│
+└── dublado/           # ✅ AUTO: Vídeos dublados finalizados (saída)
+    └── video_dublado.mp4  # Seu vídeo dublado final
+```
+
+### Resumo:
+- **VOCÊ CRIA**: Apenas `venv/` com `python3 -m venv venv`
+- **GIT CLONE**: Todo o código-fonte e documentação
+- **AUTOMÁTICO**: `dub_work/` e `dublado/` são criados quando você roda o script pela primeira vez
 
 ## Notas Importantes
 
-1. **Sempre ative o ambiente virtual** antes de usar: `source venv/bin/activate`
-2. **FFmpeg é obrigatório** - sem ele nada funciona
-3. **GPU é opcional** - funciona perfeitamente em CPU (apenas mais lento)
-4. **Scripts .bat não funcionam** no Linux - use os comandos Python diretamente
-5. **Mínimo 8GB RAM** recomendado (16GB+ para vídeos longos)
+1. **Diretórios são criados automaticamente** - Não crie `dub_work/` ou `dublado/` manualmente!
+2. **Sempre ative o ambiente virtual** antes de usar: `source venv/bin/activate`
+3. **FFmpeg é obrigatório** - sem ele nada funciona
+4. **GPU é opcional** - funciona perfeitamente em CPU (apenas mais lento)
+5. **Scripts .bat não funcionam** no Linux - use os comandos Python diretamente
+6. **Mínimo 8GB RAM** recomendado (16GB+ para vídeos longos)
 
 ## Requisitos de Sistema
 
