@@ -1304,34 +1304,17 @@ def tts_edge(segments, workdir, tgt_lang, voice=None, rate="+0%", speaker_voices
 
     print(f"[INFO] Voz padrao: {default_voice}")
     print(f"[INFO] Idioma: {lang}")
-    print(f"[INFO] Rate base: {rate}")
+    print(f"[INFO] Rate: {rate}")
 
     SAMPLE_RATE = 24000
-    CPS_TTS = 14  # Caracteres por segundo do Edge TTS
 
     seg_files = []
     metricas = []
     tsv = Path(workdir, "segments.csv")
 
-    def calcular_rate_dinamico(text, target_dur, base_rate="+0%"):
-        """Calcula rate necessario para o texto caber na duracao"""
-        chars = len(text)
-        dur_estimada = chars / CPS_TTS
-
-        if dur_estimada <= target_dur:
-            return base_rate  # Cabe sem acelerar
-
-        # Precisa acelerar
-        ratio = dur_estimada / target_dur
-        # Converter para percentual (max +50%)
-        pct = min(int((ratio - 1) * 100), 50)
-        return f"+{pct}%"
-
     async def generate_audio(text, output_path, target_dur, voice_to_use):
-        """Gera audio usando Edge TTS com rate adaptativo"""
-        # Calcular rate dinamico para este segmento
-        dynamic_rate = calcular_rate_dinamico(text, target_dur, rate)
-        communicate = edge_tts.Communicate(text, voice_to_use, rate=dynamic_rate)
+        """Gera audio usando Edge TTS"""
+        communicate = edge_tts.Communicate(text, voice_to_use, rate=rate)
         mp3_path = str(output_path).replace(".wav", ".mp3")
         await communicate.save(mp3_path)
 
