@@ -1653,8 +1653,7 @@ def time_stretch_rubberband(input_path, output_path, ratio):
         return False
 
 def sync_fit_advanced(p, target, workdir, sr, tol, maxstretch, use_rubberband=True):
-    """Sincronizacao fit avancada"""
-    from scipy.io import wavfile as wf
+    """Sincronizacao fit avancada usando ffmpeg atempo (melhor qualidade para voz)"""
 
     cur = ffprobe_duration(p)
     if cur <= 0:
@@ -1669,37 +1668,55 @@ def sync_fit_advanced(p, target, workdir, sr, tol, maxstretch, use_rubberband=Tr
 
     out = Path(workdir, p.name.replace(".wav", "_fit.wav"))
 
+    # Opcao 1: Rubberband (melhor qualidade)
     if use_rubberband and check_rubberband():
         if time_stretch_rubberband(p, out, ratio):
             print(f"    [FIT-RB] {cur:.2f}s -> {target:.2f}s (ratio={ratio:.3f})")
             return out
 
+    # Opcao 2: FFmpeg atempo (boa qualidade, sem dependencias extras)
     try:
-        import librosa
+        # atempo aceita valores entre 0.5 e 2.0
+        # Para valores fora desse range, encadear multiplos filtros
+        atempo_val = 1.0 / ratio  # atempo > 1 acelera, < 1 desacelera
 
-        file_sr, data = wf.read(str(p))
+        # Construir cadeia de filtros atempo se necessario
+        if atempo_val < 0.5:
+            # Muito lento - encadear
+            filters = []
+            while atempo_val < 0.5:
+                filters.append("atempo=0.5")
+                atempo_val *= 2
+            filters.append(f"atempo={atempo_val:.4f}")
+            filter_str = ",".join(filters)
+        elif atempo_val > 2.0:
+            # Muito rapido - encadear
+            filters = []
+            while atempo_val > 2.0:
+                filters.append("atempo=2.0")
+                atempo_val /= 2
+            filters.append(f"atempo={atempo_val:.4f}")
+            filter_str = ",".join(filters)
+        else:
+            filter_str = f"atempo={atempo_val:.4f}"
 
-        if data.dtype == np.int16:
-            data = data.astype(np.float32) / 32767.0
+        result = subprocess.run([
+            "ffmpeg", "-y", "-i", str(p),
+            "-filter:a", filter_str,
+            "-c:a", "pcm_s16le",
+            str(out)
+        ], capture_output=True)
 
-        stretched = librosa.effects.time_stretch(data, rate=1.0/ratio)
-
-        target_samples = int(target * file_sr)
-        if len(stretched) > target_samples:
-            stretched = stretched[:target_samples]
-        elif len(stretched) < target_samples:
-            pad = np.zeros(target_samples - len(stretched), dtype=np.float32)
-            stretched = np.concatenate([stretched, pad])
-
-        audio_int16 = normalize_audio_safe(stretched)
-        wf.write(str(out), file_sr, audio_int16)
-
-        print(f"    [FIT-LB] {cur:.2f}s -> {target:.2f}s (ratio={ratio:.3f})")
-        return out
+        if result.returncode == 0 and out.exists():
+            print(f"    [FIT-FF] {cur:.2f}s -> {target:.2f}s (ratio={ratio:.3f})")
+            return out
 
     except Exception as e:
-        print(f"    [WARN] time_stretch falhou: {e}")
-        return p
+        print(f"    [WARN] ffmpeg atempo falhou: {e}")
+
+    # Fallback: retornar original sem modificar
+    print(f"    [WARN] sync_fit falhou, usando original")
+    return p
 
 def sync_pad(p, target, workdir, sr):
     """Sincronizacao com padding"""
