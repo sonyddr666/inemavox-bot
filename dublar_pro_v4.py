@@ -2003,7 +2003,7 @@ Exemplos:
                    help="Modo de sincronizacao")
     ap.add_argument("--tolerance", type=float, default=0.1, help="Tolerancia sync")
     ap.add_argument("--maxstretch", type=float, default=1.3, help="Max compressao (1.3=30%)")
-    ap.add_argument("--use-rubberband", action="store_true", help="Usar rubberband")
+    ap.add_argument("--no-rubberband", action="store_true", help="Desabilitar rubberband (usar ffmpeg atempo)")
 
     # Outros
     ap.add_argument("--maxdur", type=float, default=10.0, help="Duracao maxima segmento")
@@ -2026,7 +2026,7 @@ Exemplos:
     elif args.qualidade == "maximo":
         args.tts = "xtts" if args.clonar_voz and check_xtts() else "edge"
         args.tradutor = "ollama" if check_ollama() else "m2m100"
-        args.use_rubberband = True
+        args.no_rubberband = False
         args.large_model = True
         args.whisper_model = "large"
         args.diarize = True
@@ -2188,16 +2188,18 @@ Exemplos:
         target = max(0.05, s["end"] - s["start"])
         p = seg_files[i - 1]
 
+        use_rb = not args.no_rubberband  # Usar rubberband por padrao
+
         if args.sync == "none":
             fixed.append(p)
         elif args.sync == "fit":
             fixed.append(sync_fit_advanced(p, target, workdir, sr_segs,
-                                          args.tolerance, args.maxstretch, args.use_rubberband))
+                                          args.tolerance, args.maxstretch, use_rb))
         elif args.sync == "pad":
             fixed.append(sync_pad(p, target, workdir, sr_segs))
         elif args.sync == "smart":
             fixed.append(sync_smart_advanced(p, target, workdir, sr_segs,
-                                            args.tolerance, args.maxstretch, args.use_rubberband))
+                                            args.tolerance, args.maxstretch, use_rb))
 
     seg_files = fixed
     save_checkpoint(workdir, 7, "sync")
