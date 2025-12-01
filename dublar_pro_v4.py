@@ -689,8 +689,8 @@ def ajustar_texto_para_duracao(texto, duracao_alvo, cps_original, idioma="pt"):
 
     FASE 2: CPS Adaptativo - usa o CPS real do video original
     """
-    # Usar CPS do audio original com margem maior (30%) para TTS
-    cps_alvo = cps_original * 1.3
+    # Usar CPS do audio original em vez do default do idioma
+    cps_alvo = cps_original * 1.1  # 10% de margem
 
     chars_alvo = int(duracao_alvo * cps_alvo)
     chars_atual = len(texto)
@@ -701,46 +701,32 @@ def ajustar_texto_para_duracao(texto, duracao_alvo, cps_original, idioma="pt"):
     # Precisa reduzir
     ratio = chars_alvo / chars_atual
 
-    # Remover enchimentos primeiro (sempre)
-    enchimentos = [
-        r'\bna verdade\b', r'\bbasicamente\b', r'\bgeralmente\b',
-        r'\bsimplesmente\b', r'\brealmente\b', r'\bcertamente\b',
-        r'\bobviamente\b', r'\bnaturalmente\b', r'\bprovavelmente\b',
-        r'\bpraticamente\b', r'\bdefinitivamente\b', r'\bde fato\b',
-        r'\bcom certeza\b', r'\bde qualquer forma\b', r'\bna realidade\b',
-        r'\bpor assim dizer\b', r'\bdigamos assim\b', r'\bem outras palavras\b',
-        r'\bpor exemplo\b', r'\bvocê sabe\b', r'\bentão\b', r'\bbem\b',
-        r'\bquero dizer\b', r'\bna minha opinião\b', r'\beu acho que\b',
-    ]
-    simplificado = texto
-    for pattern in enchimentos:
-        simplificado = re.sub(pattern, '', simplificado, flags=re.IGNORECASE)
-    simplificado = re.sub(r' +', ' ', simplificado).strip()
-
-    # Recalcular
-    chars_atual = len(simplificado)
-    if chars_atual <= chars_alvo:
+    if ratio >= 0.9:
+        # Pequena reducao - remover enchimentos
+        enchimentos = [
+            r'\bna verdade\b', r'\bbasicamente\b', r'\bgeralmente\b',
+            r'\bsimplesmente\b', r'\brealmente\b', r'\bcertamente\b',
+            r'\bobviamente\b', r'\bnaturalmente\b', r'\bprovavelmente\b',
+            r'\bpraticamente\b', r'\bdefinitivamente\b',
+        ]
+        simplificado = texto
+        for pattern in enchimentos:
+            simplificado = re.sub(pattern, '', simplificado, flags=re.IGNORECASE)
+        simplificado = re.sub(r' +', ' ', simplificado).strip()
         return simplificado
 
-    ratio = chars_alvo / chars_atual
-
-    if ratio >= 0.7:
+    elif ratio >= 0.7:
         # Reducao media - truncar mantendo sentido
-        palavras = simplificado.split()
-        palavras_alvo = max(int(len(palavras) * ratio), 3)
+        palavras = texto.split()
+        palavras_alvo = int(len(palavras) * ratio)
         simplificado = ' '.join(palavras[:palavras_alvo])
         if not simplificado.endswith(('.', '!', '?')):
             simplificado += '.'
         return simplificado
 
     else:
-        # Reducao grande - truncar mais agressivamente
-        palavras = simplificado.split()
-        palavras_alvo = max(int(len(palavras) * 0.5), 3)  # Pelo menos 50% ou 3 palavras
-        simplificado = ' '.join(palavras[:palavras_alvo])
-        if not simplificado.endswith(('.', '!', '?')):
-            simplificado += '.'
-        return simplificado
+        # Reducao grande - deixar texto original (sync vai ajustar)
+        return texto
 
 # ============================================================================
 # FASE 2: TRADUCAO COM CONTEXTO VIA OLLAMA
