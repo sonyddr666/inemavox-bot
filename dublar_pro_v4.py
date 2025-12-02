@@ -900,11 +900,81 @@ Concise translation (max {max_chars} chars):"""
         if response.status_code == 200:
             result = response.json()
             translated = result.get("response", "").strip()
-            translated = translated.replace("Translation:", "").strip()
+
+            # Limpar resposta do Ollama - remover instruções repetidas
+            # O modelo às vezes repete o prompt ou adiciona explicações
+
+            # Remover prefixos comuns
+            prefixes_to_remove = [
+                "Here's the translation:",
+                "Here is the translation:",
+                "Here's the translation from English to Portuguese (Brazilian):",
+                "Here is the translation of the text from English to Portuguese (Brazilian):",
+                "Translation:",
+                "Tradução:",
+                "REGRAS CRÍTICAS:",
+                "CRITICAL RULES:",
+            ]
+            for prefix in prefixes_to_remove:
+                if translated.startswith(prefix):
+                    translated = translated[len(prefix):].strip()
+
+            # Se contém bloco de instruções, pegar só a última linha (a tradução real)
+            if "REGRAS CRÍTICAS:" in translated or "CRITICAL RULES:" in translated:
+                # Tentar encontrar a tradução após "Tradução concisa" ou similar
+                markers = [
+                    "Tradução concisa (máximo",
+                    "Concise translation (max",
+                    "Translation (max",
+                    "Tradução:",
+                ]
+                for marker in markers:
+                    if marker in translated:
+                        parts = translated.split(marker)
+                        if len(parts) > 1:
+                            # Pegar o que vem depois do marker
+                            after_marker = parts[-1]
+                            # Pegar primeira linha não vazia após o marker
+                            lines = [l.strip() for l in after_marker.split('\n') if l.strip()]
+                            for line in lines:
+                                # Ignorar linhas que parecem instruções
+                                if not line.startswith('-') and not line.startswith('Note:') and len(line) > 5:
+                                    # Remover "chars):" se presente
+                                    if '):\n' in line or '):' in line:
+                                        line = line.split('):', 1)[-1].strip()
+                                    if line and not line.startswith('REGRAS') and not line.startswith('CRITICAL'):
+                                        translated = line
+                                        break
+                            break
+
+            # Remover notas explicativas no final
+            if '\n\nNote:' in translated:
+                translated = translated.split('\n\nNote:')[0].strip()
+            if '\n\nNota:' in translated:
+                translated = translated.split('\n\nNota:')[0].strip()
+
             # Remover aspas se presentes
             if translated.startswith('"') and translated.endswith('"'):
                 translated = translated[1:-1]
-            return translated
+            if translated.startswith("'") and translated.endswith("'"):
+                translated = translated[1:-1]
+
+            # Se ainda tem múltiplas linhas, pegar a última que parece tradução
+            if '\n' in translated:
+                lines = [l.strip() for l in translated.split('\n') if l.strip()]
+                # Filtrar linhas que não são instruções
+                clean_lines = [l for l in lines if not l.startswith('-')
+                              and not l.startswith('REGRAS')
+                              and not l.startswith('CRITICAL')
+                              and not l.startswith('Note:')
+                              and not l.startswith('Texto (')
+                              and 'chars)' not in l
+                              and len(l) > 10]
+                if clean_lines:
+                    # Pegar a última linha limpa (geralmente é a tradução)
+                    translated = clean_lines[-1]
+
+            return translated.strip()
         else:
             return None
     except Exception as e:
