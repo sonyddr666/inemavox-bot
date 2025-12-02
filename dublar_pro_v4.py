@@ -830,6 +830,140 @@ def ajustar_texto_para_duracao(texto, duracao_alvo, cps_original, idioma="pt", n
 # FASE 2: TRADUCAO COM CONTEXTO VIA OLLAMA
 # ============================================================================
 
+def _clean_ollama_response(response, original_text):
+    """Limpa resposta do Ollama removendo instruções, notas e lixo.
+
+    Retorna None se a resposta for inválida (para usar fallback).
+    """
+    if not response:
+        return None
+
+    text = response.strip()
+
+    # Lista de padrões que indicam resposta INVÁLIDA (retorna None para fallback)
+    invalid_patterns = [
+        "Deixe-me know",
+        "Let me know",
+        "anything else",
+        "need anything",
+        "Here's the translation",
+        "Here is the translation",
+        "I'll translate",
+        "I will translate",
+        "Sure!",
+        "Sure,",
+        "Of course",
+        "Happy to help",
+    ]
+
+    for pattern in invalid_patterns:
+        if pattern.lower() in text.lower():
+            return None
+
+    # Se a resposta é igual ao texto original (não traduziu), retorna None
+    if text.strip() == original_text.strip():
+        return None
+
+    # Lista de prefixos/substrings para REMOVER
+    garbage_patterns = [
+        "REGRAS CRÍTICAS:",
+        "CRITICAL RULES:",
+        "Tradução concisa (máximo",
+        "Concise translation (max",
+        "Translation:",
+        "Tradução:",
+        "(Note:",
+        "Note:",
+        "Nota:",
+        "chars):",
+        "caracteres):",
+        "- Isso é para DUBBING",
+        "- This is for VIDEO DUBBING",
+        "- Máximo de",
+        "- Maximum",
+        "- Remova palavras",
+        "- Remove filler",
+        "- Manter termos",
+        "- Keep technical",
+        "- NÃO adicione",
+        "- Do NOT add",
+        "- Se tiver dúvida",
+        "- If in doubt",
+        "Texto (",
+        "Text (",
+    ]
+
+    # Se contém qualquer padrão de lixo, tentar extrair só a tradução
+    has_garbage = any(p in text for p in garbage_patterns)
+
+    if has_garbage:
+        # Estratégia 1: Pegar texto após último ":" em linha com "chars)" ou "caracteres)"
+        lines = text.split('\n')
+        for line in reversed(lines):
+            line = line.strip()
+            # Ignorar linhas vazias ou muito curtas
+            if len(line) < 5:
+                continue
+            # Ignorar linhas que começam com "-" (instruções)
+            if line.startswith('-'):
+                continue
+            # Ignorar linhas que são claramente instruções
+            if any(p in line for p in garbage_patterns):
+                continue
+            # Esta linha pode ser a tradução
+            # Remover prefixos comuns
+            if ':' in line:
+                parts = line.split(':', 1)
+                if len(parts) > 1 and len(parts[1].strip()) > 5:
+                    candidate = parts[1].strip()
+                    # Verificar se não é instrução
+                    if not any(p in candidate for p in garbage_patterns):
+                        text = candidate
+                        break
+            else:
+                text = line
+                break
+
+    # Limpar aspas
+    if text.startswith('"') and text.endswith('"'):
+        text = text[1:-1]
+    if text.startswith("'") and text.endswith("'"):
+        text = text[1:-1]
+
+    # Remover notas no final
+    for sep in ['\n\nNote:', '\n\nNota:', '\n(Note', '\n(Nota']:
+        if sep in text:
+            text = text.split(sep)[0].strip()
+
+    # Se ainda tem múltiplas linhas, pegar a última que parece tradução válida
+    if '\n' in text:
+        lines = [l.strip() for l in text.split('\n') if l.strip()]
+        valid_lines = []
+        for line in lines:
+            # Ignorar linhas de instrução
+            if line.startswith('-'):
+                continue
+            if any(p in line for p in garbage_patterns):
+                continue
+            if len(line) > 5:
+                valid_lines.append(line)
+
+        if valid_lines:
+            # Pegar a última linha válida (geralmente é a tradução)
+            text = valid_lines[-1]
+
+    # Validação final: se ainda contém lixo óbvio, retorna None
+    final_garbage = ["REGRAS", "CRITICAL", "chars)", "caracteres)", "DUBBING"]
+    if any(g in text for g in final_garbage):
+        return None
+
+    # Se ficou muito curto ou vazio
+    if len(text.strip()) < 3:
+        return None
+
+    return text.strip()
+
+
 def translate_ollama_with_context(text, src_lang, tgt_lang, model="llama3",
                                    previous_segments=None, target_duration=None,
                                    cps_original=None):
@@ -901,85 +1035,38 @@ Concise translation (max {max_chars} chars):"""
             result = response.json()
             translated = result.get("response", "").strip()
 
-            # Limpar resposta do Ollama - remover instruções repetidas
-            # O modelo às vezes repete o prompt ou adiciona explicações
+            # Limpar resposta do Ollama - MUITO mais robusto
+            translated = _clean_ollama_response(translated, text)
 
-            # Remover prefixos comuns
-            prefixes_to_remove = [
-                "Here's the translation:",
-                "Here is the translation:",
-                "Here's the translation from English to Portuguese (Brazilian):",
-                "Here is the translation of the text from English to Portuguese (Brazilian):",
-                "Translation:",
-                "Tradução:",
-                "REGRAS CRÍTICAS:",
-                "CRITICAL RULES:",
-            ]
-            for prefix in prefixes_to_remove:
-                if translated.startswith(prefix):
-                    translated = translated[len(prefix):].strip()
-
-            # Se contém bloco de instruções, pegar só a última linha (a tradução real)
-            if "REGRAS CRÍTICAS:" in translated or "CRITICAL RULES:" in translated:
-                # Tentar encontrar a tradução após "Tradução concisa" ou similar
-                markers = [
-                    "Tradução concisa (máximo",
-                    "Concise translation (max",
-                    "Translation (max",
-                    "Tradução:",
-                ]
-                for marker in markers:
-                    if marker in translated:
-                        parts = translated.split(marker)
-                        if len(parts) > 1:
-                            # Pegar o que vem depois do marker
-                            after_marker = parts[-1]
-                            # Pegar primeira linha não vazia após o marker
-                            lines = [l.strip() for l in after_marker.split('\n') if l.strip()]
-                            for line in lines:
-                                # Ignorar linhas que parecem instruções
-                                if not line.startswith('-') and not line.startswith('Note:') and len(line) > 5:
-                                    # Remover "chars):" se presente
-                                    if '):\n' in line or '):' in line:
-                                        line = line.split('):', 1)[-1].strip()
-                                    if line and not line.startswith('REGRAS') and not line.startswith('CRITICAL'):
-                                        translated = line
-                                        break
-                            break
-
-            # Remover notas explicativas no final
-            if '\n\nNote:' in translated:
-                translated = translated.split('\n\nNote:')[0].strip()
-            if '\n\nNota:' in translated:
-                translated = translated.split('\n\nNota:')[0].strip()
-
-            # Remover aspas se presentes
-            if translated.startswith('"') and translated.endswith('"'):
-                translated = translated[1:-1]
-            if translated.startswith("'") and translated.endswith("'"):
-                translated = translated[1:-1]
-
-            # Se ainda tem múltiplas linhas, pegar a última que parece tradução
-            if '\n' in translated:
-                lines = [l.strip() for l in translated.split('\n') if l.strip()]
-                # Filtrar linhas que não são instruções
-                clean_lines = [l for l in lines if not l.startswith('-')
-                              and not l.startswith('REGRAS')
-                              and not l.startswith('CRITICAL')
-                              and not l.startswith('Note:')
-                              and not l.startswith('Texto (')
-                              and 'chars)' not in l
-                              and len(l) > 10]
-                if clean_lines:
-                    # Pegar a última linha limpa (geralmente é a tradução)
-                    translated = clean_lines[-1]
-
-            return translated.strip()
+            return translated
         else:
             return None
     except Exception as e:
         print(f"[WARN] Ollama erro: {e}")
         return None
+
+def _translate_single_m2m100(text, src, tgt, tok=None, model=None):
+    """Traduz um único texto com M2M100 (fallback leve)"""
+    try:
+        if tok is None or model is None:
+            from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+            tok = AutoTokenizer.from_pretrained("facebook/m2m100_418M")
+            model = AutoModelForSeq2SeqLM.from_pretrained("facebook/m2m100_418M")
+            device = get_device()
+            model = model.to(device)
+
+        tok.src_lang = src
+        encoded = tok(text, return_tensors="pt", max_length=256, truncation=True).to(model.device)
+        generated = model.generate(
+            **encoded,
+            forced_bos_token_id=tok.get_lang_id(tgt),
+            max_length=256,
+            num_beams=3
+        )
+        return tok.decode(generated[0], skip_special_tokens=True)
+    except Exception as e:
+        return None
+
 
 def translate_segments_ollama(segs, src, tgt, workdir, model="llama3", cps_original=None, no_truncate=False):
     """Traducao com Ollama (LLM local) COM CONTEXTO"""
@@ -993,6 +1080,11 @@ def translate_segments_ollama(segs, src, tgt, workdir, model="llama3", cps_origi
 
     out = []
     previous_segments = []
+    fallback_count = 0
+
+    # Preparar M2M100 para fallback (carrega sob demanda)
+    m2m_tok = None
+    m2m_model = None
 
     print(f"[INFO] Traduzindo {len(segs)} segmentos com {model}...")
     print(f"[INFO] CPS original: {cps_original:.1f}" if cps_original else "[INFO] CPS: padrao")
@@ -1021,7 +1113,31 @@ def translate_segments_ollama(segs, src, tgt, workdir, model="llama3", cps_origi
             if cps_original:
                 txt_final = ajustar_texto_para_duracao(txt_final, duracao_seg, cps_original, tgt, no_truncate)
         else:
-            txt_final = texto_original
+            # Fallback: usar M2M100 para este segmento
+            fallback_count += 1
+            if m2m_tok is None:
+                print(f"  [WARN] Seg {i+1}: Ollama falhou, carregando M2M100 para fallback...")
+                try:
+                    from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+                    m2m_tok = AutoTokenizer.from_pretrained("facebook/m2m100_418M")
+                    m2m_model = AutoModelForSeq2SeqLM.from_pretrained("facebook/m2m100_418M")
+                    device = get_device()
+                    m2m_model = m2m_model.to(device)
+                except Exception as e:
+                    print(f"  [ERRO] Falha ao carregar M2M100: {e}")
+
+            if m2m_tok and m2m_model:
+                txt_final = _translate_single_m2m100(texto_protegido, src, tgt, m2m_tok, m2m_model)
+                if txt_final:
+                    txt_final = restaurar_termos_tecnicos(txt_final, mapa)
+                    txt_final = aplicar_correcoes(txt_final)
+                    txt_final = aplicar_glossario(txt_final, src, tgt)
+                    if cps_original:
+                        txt_final = ajustar_texto_para_duracao(txt_final, duracao_seg, cps_original, tgt, no_truncate)
+                else:
+                    txt_final = texto_original  # Último recurso
+            else:
+                txt_final = texto_original  # Se M2M100 também falhou
 
         item = dict(s)
         item["text_trad"] = txt_final
@@ -1051,6 +1167,9 @@ def translate_segments_ollama(segs, src, tgt, workdir, model="llama3", cps_origi
             "model": f"ollama/{model}",
             "segments": out
         }, f, ensure_ascii=False, indent=2)
+
+    if fallback_count > 0:
+        print(f"[INFO] Fallbacks M2M100 usados: {fallback_count}/{len(segs)} segmentos")
 
     print(f"[OK] Traduzido: {len(out)} segmentos")
     return out, json_t, srt_t
