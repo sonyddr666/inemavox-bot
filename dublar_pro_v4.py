@@ -2255,9 +2255,9 @@ Exemplos:
     ap.add_argument("--clonar-voz", action="store_true", help="Clonar voz do video original (XTTS)")
 
     # Whisper
-    ap.add_argument("--whisper-model", default="medium",
-                   choices=["tiny", "small", "medium", "large"],
-                   help="Modelo Whisper")
+    ap.add_argument("--whisper-model", default="large-v3",
+                   choices=["tiny", "small", "medium", "large", "large-v2", "large-v3"],
+                   help="Modelo Whisper (padrao: large-v3)")
 
     # Diarizacao
     ap.add_argument("--diarize", action="store_true", help="Detectar multiplos falantes")
@@ -2289,14 +2289,15 @@ Exemplos:
     if args.qualidade == "rapido":
         args.tts = "edge"
         args.tradutor = "m2m100"
-        args.whisper_model = "small"
+        args.whisper_model = "medium"  # medium para rapido
     elif args.qualidade == "maximo":
         args.tts = "xtts" if args.clonar_voz and check_xtts() else "edge"
         args.tradutor = "ollama" if check_ollama() else "m2m100"
         args.no_rubberband = False
         args.large_model = True
-        args.whisper_model = "large"
+        args.whisper_model = "large-v3"  # large-v3 para maximo
         args.diarize = True
+    # balanceado usa o padrao (large-v3)
 
     # Se clonar-voz mas nao especificou XTTS
     if args.clonar_voz and args.tts != "xtts":
