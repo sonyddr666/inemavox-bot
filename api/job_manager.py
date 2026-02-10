@@ -114,16 +114,23 @@ class Job:
         total = len(STAGES)
         percent = round((current_step / total) * 100) if total > 0 else 0
 
-        # Trackear tempo da etapa atual
+        # Trackear tempo das etapas
         if current_step != self._last_stage_num and current_step > 0:
             now = time.time()
-            if self._last_stage_num > 0 and self._last_stage_start > 0:
-                prev_stage = STAGES[self._last_stage_num - 1]["id"] if self._last_stage_num <= len(STAGES) else "unknown"
-                self.stage_times[prev_stage] = round(now - self._last_stage_start, 1)
+            start_time = self._last_stage_start if self._last_stage_start > 0 else (self.started_at or now)
+            elapsed = round(now - start_time, 1)
+
+            # Quantas etapas completaram desde o ultimo check
+            stages_completed = current_step - self._last_stage_num
+            if stages_completed > 0:
+                per_stage = round(elapsed / stages_completed, 1)
+                for i in range(self._last_stage_num, current_step):
+                    if i < len(STAGES):
+                        self.stage_times[STAGES[i]["id"]] = per_stage
+
             self._last_stage_num = current_step
             self._last_stage_start = now
         elif self._last_stage_num == 0 and self.started_at:
-            self._last_stage_num = 0
             self._last_stage_start = self.started_at
 
         # Calcular ETA
@@ -133,21 +140,43 @@ class Job:
         # Tempo na etapa atual
         current_stage_elapsed = round(time.time() - self._last_stage_start, 1) if self._last_stage_start > 0 else 0
 
+        # Mapa de ferramenta por etapa baseado na config do job
+        cfg = self.config
+        asr_label = cfg.get("asr_engine", "whisper")
+        if asr_label == "whisper":
+            asr_label = f"whisper {cfg.get('whisper_model', 'large-v3')}"
+        else:
+            pm = cfg.get("parakeet_model", "nvidia/parakeet-tdt-1.1b")
+            asr_label = f"parakeet {pm.split('/')[-1]}"
+        trad_label = cfg.get("translation_engine", "m2m100")
+        if trad_label == "ollama" and cfg.get("ollama_model"):
+            trad_label = f"ollama ({cfg['ollama_model']})"
+        stage_tools = {
+            "download": "yt-dlp",
+            "extraction": "ffmpeg",
+            "transcription": asr_label,
+            "translation": trad_label,
+            "split": "ffmpeg",
+            "tts": cfg.get("tts_engine", "edge"),
+            "sync": cfg.get("sync_mode", "smart"),
+            "concat": "ffmpeg",
+            "postprocess": "rubberband",
+            "mux": "ffmpeg",
+        }
+
         # Montar info das stages
         stages_info = []
         for stage in STAGES:
             snum = stage["num"]
             sid = stage["id"]
+            tool = stage_tools.get(sid, "")
             if snum < current_step + 1:
-                # Concluido
-                st = {**stage, "status": "done", "time": self.stage_times.get(sid)}
+                st = {**stage, "status": "done", "time": self.stage_times.get(sid), "tool": tool}
             elif snum == current_step + 1:
-                # Em andamento
-                st = {**stage, "status": "running", "elapsed": current_stage_elapsed}
+                st = {**stage, "status": "running", "elapsed": current_stage_elapsed, "tool": tool}
             else:
-                # Pendente
                 est = eta["stage_estimates"].get(sid, {}).get("est_seconds") if eta else None
-                st = {**stage, "status": "pending", "estimate": est}
+                st = {**stage, "status": "pending", "estimate": est, "tool": tool}
             stages_info.append(st)
 
         return {
@@ -403,6 +432,8 @@ class JobManager:
         cmd.extend(["--asr", asr])
         if config.get("whisper_model"):
             cmd.extend(["--whisper-model", config["whisper_model"]])
+        if asr == "parakeet" and config.get("parakeet_model"):
+            cmd.extend(["--parakeet-model", config["parakeet_model"]])
 
         tradutor = config.get("translation_engine", "m2m100")
         cmd.extend(["--tradutor", tradutor])
@@ -461,6 +492,8 @@ class JobManager:
         cmd.extend(["--asr", asr])
         if config.get("whisper_model"):
             cmd.extend(["--whisper-model", config["whisper_model"]])
+        if asr == "parakeet" and config.get("parakeet_model"):
+            cmd.extend(["--parakeet-model", config["parakeet_model"]])
 
         tradutor = config.get("translation_engine", "m2m100")
         cmd.extend(["--tradutor", tradutor])

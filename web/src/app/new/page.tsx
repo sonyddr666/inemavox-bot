@@ -6,8 +6,9 @@ import { getOptions, createJob } from "@/lib/api";
 
 type Options = {
   tts_engines: { id: string; name: string; needs_gpu: boolean; needs_internet: boolean }[];
-  translation_engines: { id: string; name: string; models: string[] | string }[];
-  whisper_models: { id: string; name: string; quality: string }[];
+  translation_engines: { id: string; name: string; models: string[] | string; description?: string; detail?: string; needs_gpu?: boolean }[];
+  whisper_models: { id: string; name: string; quality: string; turbo?: boolean }[];
+  asr_engines: { id: string; name: string; description: string; detail?: string; needs_gpu: boolean; supports_languages: string | string[] }[];
   edge_voices: Record<string, { id: string; name: string; gender: string }[]>;
   bark_voices: Record<string, { id: string; name: string }[]>;
   content_types: { id: string; name: string; description: string; detail?: string; presets: Record<string, unknown> }[];
@@ -45,6 +46,47 @@ const ADVANCED_HELP: Record<string, string> = {
   noTruncate: "Quando ativado, nunca corta palavras ou frases da traducao. O texto traduzido e mantido integralmente, e o sistema de sincronizacao (sync) fica responsavel por encaixar o audio mais longo. Combine com maxstretch alto ou sync extend para melhores resultados.",
 };
 
+function DetailCard({
+  id, name, description, detail, selected, onSelect, expandedDetail, setExpandedDetail, badges, disabled,
+}: {
+  id: string; name: string; description: string; detail?: string;
+  selected: boolean; onSelect: () => void;
+  expandedDetail: string | null; setExpandedDetail: (v: string | null) => void;
+  badges?: React.ReactNode; disabled?: boolean;
+}) {
+  const detailId = id;
+  return (
+    <div>
+      <label
+        className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+          selected ? "border-blue-500 bg-blue-500/10" : "border-gray-700 hover:border-gray-600"
+        } ${expandedDetail === detailId ? "rounded-b-none" : ""} ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}>
+        <input type="radio" checked={selected} onChange={onSelect} disabled={disabled} className="mt-1" />
+        <div className="flex-1">
+          <div className="font-medium">{name}</div>
+          <div className="text-sm text-gray-400">{description}</div>
+          {badges}
+        </div>
+        {detail && (
+          <button type="button"
+            onClick={(e) => { e.preventDefault(); setExpandedDetail(expandedDetail === detailId ? null : detailId); }}
+            className="text-xs text-blue-400 hover:text-blue-300 whitespace-nowrap mt-1 flex items-center gap-1">
+            <span className="inline-block w-4 h-4 rounded-full border border-blue-400/50 text-center leading-4 text-[10px]">i</span>
+            {expandedDetail === detailId ? "Fechar" : "Saiba mais"}
+          </button>
+        )}
+      </label>
+      {expandedDetail === detailId && detail && (
+        <div className={`px-4 py-3 text-sm text-gray-300 bg-gray-800/50 border border-t-0 rounded-b-lg ${
+          selected ? "border-blue-500/50" : "border-gray-700"
+        }`}>
+          {detail}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function NewJob() {
   const router = useRouter();
   const [options, setOptions] = useState<Options | null>(null);
@@ -58,8 +100,9 @@ export default function NewJob() {
   const [contentType, setContentType] = useState("palestra");
   const [ttsEngine, setTtsEngine] = useState("edge");
   const [voice, setVoice] = useState("");
-  const [asrEngine] = useState("whisper");
+  const [asrEngine, setAsrEngine] = useState("whisper");
   const [whisperModel, setWhisperModel] = useState("large-v3");
+  const [parakeetModel, setParakeetModel] = useState("nvidia/parakeet-tdt-1.1b");
   const [translationEngine, setTranslationEngine] = useState("m2m100");
   const [ollamaModel, setOllamaModel] = useState("qwen2.5:14b");
   const [largeModel, setLargeModel] = useState(false);
@@ -86,13 +129,19 @@ export default function NewJob() {
     if (ct) {
       if (ct.presets.sync) setSyncMode(String(ct.presets.sync));
       if (ct.presets.maxstretch) setMaxstretch(Number(ct.presets.maxstretch));
-      if (ct.presets.tolerance !== undefined) {
-        // tolerance e aplicado via content_type no backend
-      }
       setNoTruncate(Boolean(ct.presets.no_truncate));
       setDiarize(Boolean(ct.presets.diarize));
     }
   }, [contentType, options]);
+
+  // Auto-selecionar Parakeet para ingles
+  useEffect(() => {
+    if (srcLang === "en") {
+      setAsrEngine("parakeet");
+    } else if (srcLang && srcLang !== "en" && asrEngine === "parakeet") {
+      setAsrEngine("whisper");
+    }
+  }, [srcLang, asrEngine]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,6 +167,7 @@ export default function NewJob() {
       };
       if (srcLang) config.src_lang = srcLang;
       if (voice) config.voice = voice;
+      if (asrEngine === "parakeet") config.parakeet_model = parakeetModel;
       if (translationEngine === "ollama") config.ollama_model = ollamaModel;
       if (largeModel) config.large_model = true;
       if (diarize) config.diarize = true;
@@ -188,52 +238,26 @@ export default function NewJob() {
           <div className="space-y-3">
             {options?.content_types.map((ct) => (
               <div key={ct.id}>
-                <label
-                  className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                    contentType === ct.id ? "border-blue-500 bg-blue-500/10" : "border-gray-700 hover:border-gray-600"
-                  } ${expandedDetail === ct.id ? "rounded-b-none" : ""}`}>
-                  <input type="radio" name="contentType" value={ct.id}
-                    checked={contentType === ct.id} onChange={(e) => setContentType(e.target.value)}
-                    className="mt-1" />
-                  <div className="flex-1">
-                    <div className="font-medium">{ct.name}</div>
-                    <div className="text-sm text-gray-400">{ct.description}</div>
-                  </div>
-                  {ct.detail && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setExpandedDetail(expandedDetail === ct.id ? null : ct.id);
-                      }}
-                      className="text-xs text-blue-400 hover:text-blue-300 whitespace-nowrap mt-1 flex items-center gap-1"
-                    >
-                      <span className="inline-block w-4 h-4 rounded-full border border-blue-400/50 text-center leading-4 text-[10px]">i</span>
-                      {expandedDetail === ct.id ? "Fechar" : "Saiba mais"}
-                    </button>
-                  )}
-                </label>
-                {expandedDetail === ct.id && ct.detail && (
-                  <div className={`px-4 py-3 text-sm text-gray-300 bg-gray-800/50 border border-t-0 rounded-b-lg ${
-                    contentType === ct.id ? "border-blue-500/50" : "border-gray-700"
-                  }`}>
-                    {ct.detail}
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {ct.presets.sync && (
-                        <span className="text-xs bg-gray-700/50 px-2 py-0.5 rounded">sync: {String(ct.presets.sync)}</span>
-                      )}
-                      {ct.presets.maxstretch && (
-                        <span className="text-xs bg-gray-700/50 px-2 py-0.5 rounded">compressao: {String(Number(ct.presets.maxstretch) * 100 - 100)}%</span>
-                      )}
-                      {ct.presets.no_truncate && (
-                        <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded">frases completas</span>
-                      )}
-                      {ct.presets.diarize && (
-                        <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded">multi-falante</span>
-                      )}
-                    </div>
-                  </div>
-                )}
+                <DetailCard
+                  id={`ct_${ct.id}`}
+                  name={ct.name}
+                  description={ct.description}
+                  detail={ct.detail}
+                  selected={contentType === ct.id}
+                  onSelect={() => setContentType(ct.id)}
+                  expandedDetail={expandedDetail}
+                  setExpandedDetail={setExpandedDetail}
+                  badges={
+                    expandedDetail === `ct_${ct.id}` ? (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {ct.presets.sync && <span className="text-xs bg-gray-700/50 px-2 py-0.5 rounded">sync: {String(ct.presets.sync)}</span>}
+                        {ct.presets.maxstretch && <span className="text-xs bg-gray-700/50 px-2 py-0.5 rounded">compressao: {String(Number(ct.presets.maxstretch) * 100 - 100)}%</span>}
+                        {ct.presets.no_truncate && <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded">frases completas</span>}
+                        {ct.presets.diarize && <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded">multi-falante</span>}
+                      </div>
+                    ) : undefined
+                  }
+                />
               </div>
             ))}
           </div>
@@ -242,6 +266,80 @@ export default function NewJob() {
         {/* Motores */}
         <section className="border border-gray-800 rounded-lg p-5">
           <h2 className="text-lg font-semibold mb-4">Motores de IA</h2>
+
+          {/* ASR Engine */}
+          <div className="mb-5">
+            <label className="block text-sm text-gray-400 mb-2">Transcricao (ASR)</label>
+            <div className="space-y-2">
+              {options?.asr_engines?.map((asr) => {
+                const isLangUnsupported = Array.isArray(asr.supports_languages)
+                  && srcLang
+                  && !asr.supports_languages.includes(srcLang);
+                return (
+                  <DetailCard
+                    key={asr.id}
+                    id={`asr_${asr.id}`}
+                    name={asr.name}
+                    description={asr.description}
+                    detail={asr.detail}
+                    selected={asrEngine === asr.id}
+                    onSelect={() => setAsrEngine(asr.id)}
+                    expandedDetail={expandedDetail}
+                    setExpandedDetail={setExpandedDetail}
+                    disabled={!!isLangUnsupported}
+                    badges={
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {asr.needs_gpu && <span className="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded">Requer GPU</span>}
+                        {asr.supports_languages === "all"
+                          ? <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded">99+ idiomas</span>
+                          : <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded">Apenas ingles</span>}
+                      </div>
+                    }
+                  />
+                );
+              })}
+            </div>
+
+            {/* Parakeet + non-English warning */}
+            {asrEngine === "parakeet" && srcLang && srcLang !== "en" && (
+              <div className="mt-2 text-sm text-yellow-400 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+                Parakeet suporta apenas ingles. O idioma selecionado ({srcLang}) nao e suportado.
+              </div>
+            )}
+            {asrEngine === "parakeet" && !srcLang && (
+              <div className="mt-2 text-sm text-yellow-400 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+                Parakeet suporta apenas ingles. Para seguranca, selecione o idioma de origem manualmente.
+              </div>
+            )}
+          </div>
+
+          {/* Whisper Model - only when whisper selected */}
+          {asrEngine === "whisper" && (
+            <div className="mb-4">
+              <label className="block text-sm text-gray-400 mb-1">Modelo Whisper</label>
+              <select value={whisperModel} onChange={(e) => setWhisperModel(e.target.value)}
+                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white">
+                {options?.whisper_models.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} - {m.quality}{m.turbo ? " (rapido)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Parakeet Model - only when parakeet selected */}
+          {asrEngine === "parakeet" && (
+            <div className="mb-4">
+              <label className="block text-sm text-gray-400 mb-1">Modelo Parakeet</label>
+              <select value={parakeetModel} onChange={(e) => setParakeetModel(e.target.value)}
+                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white">
+                <option value="nvidia/parakeet-tdt-1.1b">TDT 1.1B (recomendado)</option>
+                <option value="nvidia/parakeet-ctc-1.1b">CTC 1.1B (mais rapido)</option>
+                <option value="nvidia/parakeet-rnnt-1.1b">RNNT 1.1B (mais preciso)</option>
+              </select>
+            </div>
+          )}
 
           {/* TTS */}
           <div className="mb-4">
@@ -288,13 +386,28 @@ export default function NewJob() {
 
           {/* Traducao */}
           <div className="mb-4">
-            <label className="block text-sm text-gray-400 mb-1">Motor de Traducao</label>
-            <select value={translationEngine} onChange={(e) => setTranslationEngine(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white">
-              {options?.translation_engines.map((e) => (
-                <option key={e.id} value={e.id}>{e.name}</option>
+            <label className="block text-sm text-gray-400 mb-2">Motor de Traducao</label>
+            <div className="space-y-2">
+              {options?.translation_engines.map((te) => (
+                <DetailCard
+                  key={te.id}
+                  id={`trad_${te.id}`}
+                  name={te.name}
+                  description={te.description || ""}
+                  detail={te.detail}
+                  selected={translationEngine === te.id}
+                  onSelect={() => setTranslationEngine(te.id)}
+                  expandedDetail={expandedDetail}
+                  setExpandedDetail={setExpandedDetail}
+                  badges={
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {te.needs_gpu && <span className="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded">Requer GPU</span>}
+                      {!te.needs_gpu && <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded">CPU</span>}
+                    </div>
+                  }
+                />
               ))}
-            </select>
+            </div>
           </div>
 
           {/* Modelo Ollama */}
@@ -303,7 +416,7 @@ export default function NewJob() {
               <label className="block text-sm text-gray-400 mb-1">Modelo Ollama</label>
               <select value={ollamaModel} onChange={(e) => setOllamaModel(e.target.value)}
                 className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white">
-                {options?.ollama_models.map((m) => (
+                {options?.ollama_models?.map((m) => (
                   <option key={m.id} value={m.id}>{m.name} ({m.size_gb}GB)</option>
                 ))}
               </select>
@@ -316,17 +429,6 @@ export default function NewJob() {
               Usar modelo grande (M2M100 1.2B - melhor qualidade)
             </label>
           )}
-
-          {/* Whisper */}
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">Modelo Whisper (ASR)</label>
-            <select value={whisperModel} onChange={(e) => setWhisperModel(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white">
-              {options?.whisper_models.map((m) => (
-                <option key={m.id} value={m.id}>{m.name} - {m.quality}</option>
-              ))}
-            </select>
-          </div>
         </section>
 
         {/* Opcoes Avancadas */}

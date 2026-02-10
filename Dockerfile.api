@@ -48,6 +48,13 @@ RUN pip install --no-cache-dir --no-deps transformers safetensors accelerate
 RUN pip install --no-cache-dir --no-deps openai-whisper
 RUN pip install --no-cache-dir tiktoken more-itertools
 
+# NeMo ASR (NVIDIA Parakeet) - sem puxar torch para preservar PyTorch NVIDIA
+RUN pip install --no-cache-dir --no-deps nemo_toolkit
+RUN pip install --no-cache-dir \
+    hydra-core omegaconf pytorch-lightning \
+    braceexpand editdistance jiwer lhotse \
+    webdataset cytoolz
+
 # Verificar PyTorch NVIDIA preservado
 RUN python -c "\
 import torch; \

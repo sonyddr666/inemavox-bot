@@ -2789,7 +2789,7 @@ Exemplos:
     ap.add_argument("--asr", choices=["whisper", "parakeet"], default="whisper",
                    help="Engine de transcricao (padrao: whisper)")
     ap.add_argument("--whisper-model", default="large-v3",
-                   choices=["tiny", "small", "medium", "large", "large-v2", "large-v3"],
+                   choices=["tiny", "small", "medium", "large", "large-v2", "large-v3", "large-v3-turbo"],
                    help="Modelo Whisper (padrao: large-v3)")
     ap.add_argument("--parakeet-model", default="nvidia/parakeet-tdt-1.1b",
                    choices=["nvidia/parakeet-tdt-1.1b", "nvidia/parakeet-ctc-1.1b", "nvidia/parakeet-rnnt-1.1b"],

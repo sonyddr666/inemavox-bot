@@ -64,6 +64,26 @@ WHISPER_MODELS = [
     {"id": "small", "name": "Small (244M)", "size_mb": 460, "quality": "media"},
     {"id": "medium", "name": "Medium (769M)", "size_mb": 1500, "quality": "boa"},
     {"id": "large-v3", "name": "Large v3 (1.5B)", "size_mb": 3000, "quality": "excelente"},
+    {"id": "large-v3-turbo", "name": "Large v3 Turbo (809M)", "size_mb": 1600, "quality": "excelente", "turbo": True},
+]
+
+ASR_ENGINES = [
+    {
+        "id": "whisper",
+        "name": "Whisper (OpenAI / Faster-Whisper)",
+        "description": "Multi-idioma. Suporta 99+ idiomas com deteccao automatica.",
+        "detail": "Usa Faster-Whisper (CTranslate2) com aceleracao GPU ou OpenAI Whisper (PyTorch) como fallback. Detecta idioma automaticamente. Modelos de 39M a 1.5B parametros. O large-v3-turbo e uma versao destilada ~3x mais rapida com qualidade similar ao large-v3.",
+        "needs_gpu": False,
+        "supports_languages": "all",
+    },
+    {
+        "id": "parakeet",
+        "name": "Parakeet (NVIDIA NeMo)",
+        "description": "Otimizado para GPU NVIDIA. Apenas ingles, ~3-5x mais rapido que Whisper.",
+        "detail": "Modelo da NVIDIA treinado para ingles. Usa NeMo toolkit com otimizacoes para GPUs NVIDIA. Significativamente mais rapido que Whisper para ingles. NAO suporta outros idiomas. Requer GPU NVIDIA com CUDA. Modelos: TDT-1.1B (recomendado, melhor pontuacao), CTC-1.1B (mais rapido), RNNT-1.1B (mais preciso).",
+        "needs_gpu": True,
+        "supports_languages": ["en"],
+    },
 ]
 
 TTS_ENGINES = [
@@ -74,8 +94,22 @@ TTS_ENGINES = [
 ]
 
 TRANSLATION_ENGINES = [
-    {"id": "m2m100", "name": "M2M100 (Facebook)", "needs_gpu": False, "models": ["418M", "1.2B"]},
-    {"id": "ollama", "name": "Ollama (LLM Local)", "needs_gpu": True, "models": "dynamic"},
+    {
+        "id": "m2m100",
+        "name": "M2M100 (Facebook)",
+        "needs_gpu": False,
+        "models": ["418M", "1.2B"],
+        "description": "Traducao offline multi-idioma. Funciona sem internet e sem GPU.",
+        "detail": "Modelo multilingual da Meta. Suporta 100 idiomas em qualquer direcao sem passar pelo ingles. Modelo 418M rapido e leve, 1.2B melhor qualidade. Roda em CPU. Bom para frases curtas, pode perder contexto em frases longas.",
+    },
+    {
+        "id": "ollama",
+        "name": "Ollama (LLM Local)",
+        "needs_gpu": True,
+        "models": "dynamic",
+        "description": "Traducao via LLM local. Melhor qualidade, mais lento, requer VRAM.",
+        "detail": "Usa LLM local via Ollama. Qualidade superior ao M2M100 pois entende contexto, expressoes idiomaticas e tom. Requer Ollama instalado com modelo carregado (ex: qwen2.5:14b). Mais lento e usa VRAM da GPU. Ideal quando qualidade de traducao e prioridade.",
+    },
 ]
 
 CONTENT_TYPES = [
@@ -204,6 +238,7 @@ def get_all_options() -> dict:
         "tts_engines": TTS_ENGINES,
         "translation_engines": TRANSLATION_ENGINES,
         "whisper_models": WHISPER_MODELS,
+        "asr_engines": ASR_ENGINES,
         "edge_voices": EDGE_VOICES,
         "bark_voices": BARK_VOICES,
         "content_types": CONTENT_TYPES,

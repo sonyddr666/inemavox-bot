@@ -8,7 +8,7 @@ type JobData = Record<string, unknown>;
 type LogEntry = { timestamp: string; level: string; message: string };
 type StageInfo = {
   num: number; id: string; name: string; icon: string;
-  status: string; time?: number; elapsed?: number; estimate?: number;
+  status: string; time?: number; elapsed?: number; estimate?: number; tool?: string;
 };
 
 function formatTime(seconds: number | undefined | null): string {
@@ -195,6 +195,7 @@ export default function JobDetail() {
                   <div className="w-6 text-center text-gray-500 font-mono text-xs">{stage.num}</div>
                   <div className={`flex-1 ${isRunning ? "text-white font-medium" : isDone ? "text-gray-400" : "text-gray-600"}`}>
                     {stage.name}
+                    {stage.tool && <span className="text-xs text-gray-500 ml-2">{stage.tool}</span>}
                     {isRunning && <span className="ml-2 inline-block animate-pulse">●</span>}
                   </div>
 
