@@ -65,14 +65,16 @@ def extract_audio(source: Path, workdir: Path) -> Path:
 
 
 def _has_cuda() -> bool:
-    """Verifica se CUDA esta disponivel tanto no PyTorch quanto no CTranslate2."""
+    """Verifica se CUDA esta disponivel no PyTorch E no CTranslate2 (mesmo check do dublar_pro_v5.py)."""
     try:
+        import torch
+        if not torch.cuda.is_available():
+            return False
         import ctranslate2
-        if ctranslate2.get_cuda_device_count() > 0:
-            return True
+        ctranslate2.get_supported_compute_types("cuda")  # lanca ValueError se sem CUDA
+        return True
     except Exception:
-        pass
-    return False
+        return False
 
 
 def transcribe_whisper(audio_path: Path, model: str, src_lang: str | None) -> list[dict]:
