@@ -366,7 +366,30 @@ class JobManager:
             if not config_path.exists():
                 continue
             job_id = job_dir.name
-            if job_id in self.jobs:
+            # Re-avaliar jobs que estavam em estado terminal mas podem ter
+            # concluido durante um reload (Docker container continuou rodando)
+            existing = self.jobs.get(job_id)
+            if existing and existing.status in ("completed", "running", "queued"):
+                continue
+            if existing and existing.status in ("failed", "cancelled"):
+                # Re-checar se os arquivos de saida existem agora
+                existing_config = existing.config
+                existing_type = existing_config.get("job_type", "dubbing")
+                if existing_type == "cutting":
+                    clips_dir = job_dir / "clips"
+                    if clips_dir.exists() and any(clips_dir.glob("clip_*.mp4")):
+                        existing.status = "completed"
+                        existing.error = None
+                elif existing_type == "transcription":
+                    transcript_dir = job_dir / "transcription"
+                    if transcript_dir.exists() and any(transcript_dir.glob("transcript.*")):
+                        existing.status = "completed"
+                        existing.error = None
+                else:
+                    dublado_dir = job_dir / "dublado"
+                    if dublado_dir.exists() and any(dublado_dir.glob("*.mp4")):
+                        existing.status = "completed"
+                        existing.error = None
                 continue
             try:
                 config = json.loads(config_path.read_text())
