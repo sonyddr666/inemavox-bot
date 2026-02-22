@@ -211,9 +211,24 @@ def check_rubberband():
     """Verifica se rubberband esta disponivel"""
     return shutil.which("rubberband") is not None
 
+def _find_yt_dlp() -> str:
+    """Retorna o caminho completo do yt-dlp (venv ou PATH)."""
+    # 1. Mesmo diretorio do Python atual (venv)
+    py_bin = Path(sys.executable).parent
+    for name in ("yt-dlp", "yt-dlp.exe"):
+        p = py_bin / name
+        if p.exists():
+            return str(p)
+    # 2. shutil.which (PATH do sistema)
+    found = shutil.which("yt-dlp")
+    if found:
+        return found
+    return "yt-dlp"  # fallback, vai gerar erro descritivo
+
 def check_yt_dlp():
     """Verifica se yt-dlp esta disponivel"""
-    return shutil.which("yt-dlp") is not None
+    p = _find_yt_dlp()
+    return p != "yt-dlp" or shutil.which("yt-dlp") is not None
 
 def check_ollama(model=None):
     """Verifica se Ollama esta rodando e (opcionalmente) se o modelo existe"""
@@ -355,7 +370,7 @@ def download_youtube(url, output_dir):
     output_template = str(Path(output_dir) / "%(title)s.%(ext)s")
 
     sh([
-        "yt-dlp",
+        _find_yt_dlp(),
         "-f", "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1080]+bestaudio/best[ext=mp4]/best",
         "--merge-output-format", "mp4",
         "--restrict-filenames",  # Remove caracteres especiais do nome
