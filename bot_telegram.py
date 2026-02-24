@@ -70,33 +70,36 @@ if BOT_LITE_MODE:
 # CONFIGURACOES
 # ============================================
 
-# Idiomas suportados
+# Idiomas suportados (mapeados para Edge TTS)
 IDIOMAS = {
-    "pt": "Portugues",
-    "en": "Ingles",
-    "es": "Espanhol",
-    "fr": "Frances",
-    "de": "Alemao",
-    "it": "Italiano",
-    "ja": "Japones",
-    "ko": "Coreano",
-    "zh": "Chines",
-    "ru": "Russo",
-    "ar": "Arabe",
-    "hi": "Hindi",
+    "pt-BR": "Portugues",
+    "en-US": "Ingles",
+    "es-ES": "Espanhol",
+    "fr-FR": "Frances",
+    "de-DE": "Alemao",
+    "it-IT": "Italiano",
+    "ja-JP": "Japones",
+    "ko-KR": "Coreano",
+    "zh-CN": "Chines",
+    "ru-RU": "Russo",
+    "ar-SA": "Arabe",
+    "hi-IN": "Hindi",
 }
 
-# Vozes Edge TTS disponiveis
+# Vozes Edge TTS disponiveis (nomes completos)
 VOZES_EDGE = {
-    "pt-BR": ["Antoni", "Francisca", "Antonio"],
-    "en-US": ["Aria", "Guy", "Jenny"],
-    "es-ES": ["Elvira", "Dario"],
-    "fr-FR": ["Denise", "Henri"],
-    "de-DE": ["Katja", "Conrad"],
-    "it-IT": ["Elsa", "Diego"],
-    "ja-JP": ["Nanami", "Kei"],
-    "ko-KR": ["SunHi", "InJoon"],
-    "zh-CN": ["Xiaoxiao", "Yunxi"],
+    "pt-BR": ["pt-BR-AntonioNeural", "pt-BR-FranciscaNeural"],
+    "en-US": ["en-US-AriaNeural", "en-US-GuyNeural", "en-US-JennyNeural"],
+    "es-ES": ["es-ES-ElviraNeural", "es-ES-DarioNeural"],
+    "fr-FR": ["fr-FR-DeniseNeural", "fr-FR-HenriNeural"],
+    "de-DE": ["de-DE-KatjaNeural", "de-DE-ConradNeural"],
+    "it-IT": ["it-IT-ElsaNeural", "it-IT-DiegoNeural"],
+    "ja-JP": ["ja-JP-NanamiNeural", "ja-JP-KeitaNeural"],
+    "ko-KR": ["ko-KR-SunHiNeural", "ko-KR-InJoonNeural"],
+    "zh-CN": ["zh-CN-XiaoxiaoNeural", "zh-CN-YunxiNeural"],
+    "ru-RU": ["ru-RU-SvetlanaNeural", "ru-RU-DmitryNeural"],
+    "ar-SA": ["ar-SA-ZariyahNeural", "ar-SA-HamedNeural"],
+    "hi-IN": ["hi-IN-SwaraNeural", "hi-IN-MadhurNeural"],
 }
 
 # Modelos de transcricao
@@ -553,6 +556,42 @@ async def callback_cortar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return SELECIONAR_TIPO_CORTE
 
 
+async def callback_corte_tipo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler para tipo de corte (timestamps ou viral)"""
+    query = update.callback_query
+    await query.answer()
+    
+    tipo = query.data.replace("corte_", "")
+    user_id = query.from_user.id
+    
+    if user_id in dados_usuario:
+        dados_usuario[user_id]["tipo_corte"] = tipo
+    
+    if tipo == "auto":
+        # Modo viral - desabilitado no LITE
+        if BOT_LITE_MODE:
+            await query.edit_message_text(
+                "Detectar Momentos Virais\n\n"
+                "Desculpe, esta funcionalidade esta desabilitada no modo LITE.\n"
+                "Motivo: requer modelos de IA pesados (Whisper, LLM).\n\n"
+                "Use 'Por Timestamps' para cortar manualmente."
+            )
+            return ConversationHandler.END
+        else:
+            await query.edit_message_text(
+                "Detectar Momentos Virais\n\n"
+                "Envie o arquivo de video ou URL:"
+            )
+            return ENVIAR_ARQUIVO
+    else:
+        # Modo timestamps manual
+        await query.edit_message_text(
+            "Cortar por Timestamps\n\n"
+            "Envie o arquivo de video ou URL:"
+        )
+        return ENVIAR_ARQUIVO
+
+
 async def callback_tts(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler para TTS"""
     query = update.callback_query
@@ -806,6 +845,17 @@ async def processar_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 await update.message.reply_text(f"OK: {resultado}")
         
+        elif operacao == "cortar":
+            # Salvar URL e pedir timestamps
+            dados_usuario[user_id]["arquivo"] = url
+            await update.message.reply_text(
+                "Video recebido!\n\n"
+                "Agora envie os timestamps no formato:\n"
+                "INICIO-FIM\n\n"
+                "Exemplo: 00:30-02:15"
+            )
+            return ENVIAR_TIMESTAMPS
+        
         else:
             await update.message.reply_text("Operacao nao reconhecida. Use /start")
     
@@ -901,12 +951,15 @@ async def processar_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         if operacao == "tts":
-            voz = dados_usuario[user_id].get("voz_tts", "Antoni")
+            voz = dados_usuario[user_id].get("voz_tts", "pt-BR-FranciscaNeural")
             idioma = dados_usuario[user_id].get("idioma", "pt-BR")
             
-            resultado = await processador.gerar_tts(texto, voz, idioma, user_id)
+            # Extrair codigo de idioma simples (pt-BR -> pt)
+            lang_simple = idioma.split("-")[0] if "-" in idioma else idioma
             
-            if resultado and resultado.endswith(".mp3"):
+            resultado = await processador.gerar_tts(texto, voz, lang_simple, user_id)
+            
+            if resultado and (resultado.endswith(".mp3") or resultado.endswith(".wav")):
                 await update.message.reply_audio(audio=open(resultado, "rb"))
             else:
                 await update.message.reply_text(f"OK: {resultado}")
@@ -929,6 +982,56 @@ async def processar_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     except Exception as e:
         logger.error(f"Erro ao processar texto: {e}")
+        await update.message.reply_text(f"Erro: {str(e)}")
+    
+    return ConversationHandler.END
+
+
+async def processar_timestamps(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Processa timestamps para corte de video"""
+    user_id = update.message.from_user.id
+    timestamps = update.message.text.strip()
+    
+    if user_id not in dados_usuario:
+        await update.message.reply_text("Use /start para comecar")
+        return ConversationHandler.END
+    
+    # Parse timestamps (formato: 00:30-02:15)
+    try:
+        partes = timestamps.split("-")
+        if len(partes) != 2:
+            raise ValueError("Formato invalido")
+        
+        inicio = partes[0].strip()
+        fim = partes[1].strip()
+        
+        # Validar formato (MM:SS ou HH:MM:SS)
+        import re
+        if not re.match(r'^\d{1,2}:\d{2}(:\d{2})?$', inicio) or not re.match(r'^\d{1,2}:\d{2}(:\d{2})?$', fim):
+            raise ValueError("Formato de tempo invalido")
+        
+    except ValueError as e:
+        await update.message.reply_text(
+            f"Formato invalido! Use: INICIO-FIM\n"
+            f"Exemplo: 00:30-02:15\n"
+            f"Erro: {e}"
+        )
+        return ENVIAR_TIMESTAMPS
+    
+    arquivo = dados_usuario[user_id].get("arquivo", "")
+    
+    await update.message.reply_text("Cortando video... Isso pode levar alguns minutos.")
+    
+    try:
+        resultado = await processador.cortar_video(arquivo, inicio, fim, user_id)
+        
+        if resultado and resultado.endswith(".mp4"):
+            await update.message.reply_video(video=open(resultado, "rb"))
+        else:
+            await update.message.reply_text(f"OK: {resultado}")
+    
+    except Exception as e:
+        logger.error(f"Erro ao cortar video: {e}")
         await update.message.reply_text(f"Erro: {str(e)}")
     
     return ConversationHandler.END
@@ -1020,7 +1123,10 @@ def main():
                 MessageHandler(filters.TEXT & ~filters.COMMAND, processar_url),
             ],
             SELECIONAR_TIPO_CORTE: [
-                CallbackQueryHandler(callback_cortar, pattern="^corte_"),
+                CallbackQueryHandler(callback_corte_tipo, pattern="^corte_"),
+            ],
+            ENVIAR_TIMESTAMPS: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, processar_timestamps),
             ],
         },
         fallbacks=[CommandHandler("start", start_command)],
