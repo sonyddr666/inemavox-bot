@@ -1,0 +1,33 @@
+# Self-hosted Telegram Bot API Server
+# Use: docker-compose -f docker-compose.telegram-api.yml up -d
+#
+# IMPORTANTE: Use a imagem pre-compilada aiogram/telegram-bot-api:latest
+# NAO precisa de build - eh uma imagem ja pronta (~100MB apenas)
+#
+# Requisitos:
+# 1. Obter API_ID e API_HASH em https://my.telegram.org/apps
+
+version: '3.8'
+
+services:
+  telegram-bot-api:
+    image: aiogram/telegram-bot-api:latest
+    container_name: telegram-bot-api
+    environment:
+      - TELEGRAM_API_ID=${API_ID}
+      - TELEGRAM_API_HASH=${API_HASH}
+      - TELEGRAM_LOCAL=1
+    ports:
+      - "8081:8081"
+    volumes:
+      # Persistencia dos dados do Telegram
+      - telegram-api-data:/var/lib/telegram-bot-api
+    restart: unless-stopped
+    # Limite de memoria (2GB conforme documentacao)
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+volumes:
+  telegram-api-data:
