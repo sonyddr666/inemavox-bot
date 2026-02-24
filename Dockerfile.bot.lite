@@ -1,0 +1,36 @@
+# inemaVOX Bot LITE - Sem dublagem (imagem leve ~200MB)
+# Build: docker build -f Dockerfile.bot.lite -t inemavox-bot-lite .
+# Run: docker run -d --name inemavox-bot -e TELEGRAM_BOT_TOKEN=seu_token inemavox-bot-lite
+
+FROM python:3.11-slim
+
+# Install system dependencies (minimo)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements first for caching
+COPY requirements_bot_lite.txt /app/requirements.txt
+COPY requirements_bot.txt /app/requirements_bot.txt
+
+# Install Python dependencies (versao leve)
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements_bot.txt
+
+# Copy bot code
+COPY bot_telegram.py /app/
+
+# Create necessary directories
+RUN mkdir -p /app/jobs /app/temp
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV JOBS_DIR=/app/jobs
+ENV BOT_LITE_MODE=1
+
+# Run the bot
+CMD ["python", "bot_telegram.py"]

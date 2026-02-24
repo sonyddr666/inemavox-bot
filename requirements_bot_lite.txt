@@ -1,0 +1,36 @@
+# inemaVOX Bot LITE - Sem dublagem (mais leve)
+# Para usar: pip install -r requirements_bot_lite.txt
+
+# ============================================
+# TELEGRAM BOT
+# ============================================
+python-telegram-bot>=20.0
+requests>=2.28.0
+
+# ============================================
+# DOWNLOAD DE VIDEOS
+# ============================================
+yt-dlp>=2023.0.0
+
+# ============================================
+# TRANSICAO - Whisper leve (opcional)
+# ============================================
+# faster-whisper requer torch, entao removemos
+# Se precisar de transcricao, instale separadamente:
+# pip install faster-whisper
+
+# ============================================
+# TTS - Edge TTS (leve, online)
+# ============================================
+edge-tts>=6.1.0
+
+# ============================================
+# PROCESSAMENTO DE AUDIO (basico)
+# ============================================
+# scipy, numpy, librosa requerem dependencias pesadas
+# Mantemos apenas o essencial
+
+# ============================================
+# UTILITARIOS
+# ============================================
+Pillow>=10.0.0

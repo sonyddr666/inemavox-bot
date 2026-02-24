@@ -46,6 +46,11 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 # Token do bot - configure via variavel de ambiente
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 
+# Modo LITE - desabilita funcionalidades pesadas (dublagem, transcricao, clonagem)
+BOT_LITE_MODE = os.environ.get("BOT_LITE_MODE", "0") == "1"
+if BOT_LITE_MODE:
+    logger.info("Modo LITE ativado - dublagem, transcricao e clonagem desabilitados")
+
 # Estados da conversa
 (
     ESCOLHER_OPERACAO,
@@ -403,8 +408,9 @@ dados_usuario = {}
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler do comando /start"""
+    modo_texto = "\n(Modo LITE - dublagem desabilitada)" if BOT_LITE_MODE else ""
     await update.message.reply_text(
-        "inemaVOX Bot\n\n"
+        f"inemaVOX Bot{modo_texto}\n\n"
         "Bem-vindo ao bot de dublagem e processamento de video com IA!\n\n"
         "Selecione uma operacao:",
         reply_markup=menu_principal()
@@ -416,13 +422,17 @@ def menu_principal():
     """Cria o menu principal de operacoes"""
     keyboard = [
         [InlineKeyboardButton("Download", callback_data="op_download")],
-        [InlineKeyboardButton("Transcrever", callback_data="op_transcrever")],
-        [InlineKeyboardButton("Dublar", callback_data="op_dublar")],
         [InlineKeyboardButton("Cortar", callback_data="op_cortar")],
         [InlineKeyboardButton("TTS", callback_data="op_tts")],
-        [InlineKeyboardButton("Clonar Voz", callback_data="op_voice_clone")],
-        [InlineKeyboardButton("Status", callback_data="op_status")],
     ]
+    
+    # Funcionalidades pesadas - apenas se NAO estiver em modo LITE
+    if not BOT_LITE_MODE:
+        keyboard.insert(1, [InlineKeyboardButton("Transcrever", callback_data="op_transcrever")])
+        keyboard.insert(2, [InlineKeyboardButton("Dublar", callback_data="op_dublar")])
+        keyboard.append([InlineKeyboardButton("Clonar Voz", callback_data="op_voice_clone")])
+    
+    keyboard.append([InlineKeyboardButton("Status", callback_data="op_status")])
     return InlineKeyboardMarkup(keyboard)
 
 
@@ -462,6 +472,16 @@ async def callback_transcrever(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     await query.answer()
     
+    # Verificar modo LITE
+    if BOT_LITE_MODE:
+        await query.edit_message_text(
+            "Transcrever Video\n\n"
+            "Desculpe, esta funcionalidade esta desabilitada no modo LITE.\n"
+            "Motivo: requer modelos de IA pesados (Whisper, PyTorch).\n\n"
+            "Use o modo completo para transcrever videos."
+        )
+        return ConversationHandler.END
+    
     dados_usuario[query.from_user.id] = {"operacao": "transcrever"}
     
     # Menu de modelos
@@ -484,6 +504,16 @@ async def callback_dublar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler para dublagem"""
     query = update.callback_query
     await query.answer()
+    
+    # Verificar modo LITE
+    if BOT_LITE_MODE:
+        await query.edit_message_text(
+            "Dublar Video\n\n"
+            "Desculpe, esta funcionalidade esta desabilitada no modo LITE.\n"
+            "Motivo: requer modelos de IA pesados (Whisper, M2M100, PyTorch).\n\n"
+            "Use o modo completo para dublar videos."
+        )
+        return ConversationHandler.END
     
     dados_usuario[query.from_user.id] = {"operacao": "dublar"}
     
@@ -542,6 +572,16 @@ async def callback_voice_clone(update: Update, context: ContextTypes.DEFAULT_TYP
     """Handler para clonagem de voz"""
     query = update.callback_query
     await query.answer()
+    
+    # Verificar modo LITE
+    if BOT_LITE_MODE:
+        await query.edit_message_text(
+            "Clonar Voz\n\n"
+            "Desculpe, esta funcionalidade esta desabilitada no modo LITE.\n"
+            "Motivo: requer modelos de IA pesados (Bark, PyTorch).\n\n"
+            "Use o modo completo para clonar vozes."
+        )
+        return ConversationHandler.END
     
     dados_usuario[query.from_user.id] = {"operacao": "voice_clone"}
     

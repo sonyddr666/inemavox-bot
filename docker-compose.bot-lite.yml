@@ -1,0 +1,35 @@
+# inemaVOX Bot LITE - Sem dublagem (imagem leve)
+# Use: docker-compose -f docker-compose.bot-lite.yml up -d
+#
+# Funcionalidades disponiveis:
+# - Download de videos (YouTube, TikTok, Instagram, etc.)
+# - TTS (Texto para Fala com Edge TTS)
+# - Corte de videos por timestamps
+#
+# Funcionalidades DESABILITADAS (para economizar memoria):
+# - Dublagem (requer PyTorch, Whisper, transformers - ~4GB)
+# - Transcricao (requer faster-whisper - ~1GB)
+# - Clonagem de voz (requer bark - ~2GB)
+
+version: '3.8'
+
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.bot.lite
+    image: inemavox-bot-lite:latest
+    container_name: inemavox-bot
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - JOBS_DIR=/app/jobs
+      - BOT_LITE_MODE=1
+    volumes:
+      - ./jobs:/app/jobs
+      - ./temp:/app/temp
+    restart: unless-stopped
+    # Sem GPU - modo leve
+    deploy:
+      resources:
+        limits:
+          memory: 512M
