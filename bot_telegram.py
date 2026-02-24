@@ -137,12 +137,10 @@ class Processador:
         output_dir = self.jobs_dir / job_id
         output_dir.mkdir(exist_ok=True)
         
-        output_template = str(output_dir / "%(title)s.%(ext)s")
-        
         cmd = [
             "python", "baixar_v1.py",
             "--url", url,
-            "--output", str(output_dir)
+            "--outdir", str(output_dir)
         ]
         
         logger.info(f"Baixando video: {url}")
@@ -257,12 +255,15 @@ class Processador:
         output_dir = self.jobs_dir / job_id
         output_dir.mkdir(exist_ok=True)
         
+        # Formato de timestamps: 00:30-02:15
+        timestamps = f"{inicio}-{fim}"
+        
         cmd = [
             "python", "clipar_v1.py",
-            "--input", arquivo,
-            "--start", inicio,
-            "--end", fim,
-            "--output", str(output_dir)
+            "--in", arquivo,
+            "--outdir", str(output_dir),
+            "--mode", "manual",
+            "--timestamps", timestamps
         ]
         
         logger.info(f"Cortando video: {arquivo}")
@@ -294,14 +295,12 @@ class Processador:
         output_dir = self.jobs_dir / job_id
         output_dir.mkdir(exist_ok=True)
         
-        output_file = output_dir / "tts_audio.mp3"
-        
         cmd = [
             "python", "tts_direct.py",
             "--text", texto,
             "--voice", voz,
             "--lang", idioma,
-            "--output", str(output_file)
+            "--outdir", str(output_dir)
         ]
         
         logger.info(f"Gerando TTS: {texto[:50]}...")
@@ -316,8 +315,13 @@ class Processador:
             
             stdout, stderr = await process.communicate()
             
-            if process.returncode == 0 and output_file.exists():
-                return str(output_file)
+            # Verificar arquivo gerado (generated.mp3 ou generated.wav)
+            audio_file = output_dir / "generated.mp3"
+            if not audio_file.exists():
+                audio_file = output_dir / "generated.wav"
+            
+            if process.returncode == 0 and audio_file.exists():
+                return str(audio_file)
             else:
                 return f"Erro no TTS: {stderr.decode()}"
                 
