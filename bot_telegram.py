@@ -64,7 +64,7 @@ if BOT_LITE_MODE:
     ENVIAR_AUDIO_CLONE,
     SELECIONAR_TIPO_CORTE,
     ENVIAR_TIMESTAMPS,
-) = range(12)
+) = range(11)
 
 # ============================================
 # CONFIGURACOES
