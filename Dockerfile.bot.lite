@@ -21,8 +21,11 @@ COPY requirements_bot.txt /app/requirements_bot.txt
 RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install --no-cache-dir -r requirements_bot.txt
 
-# Copy bot code
+# Copy bot code and scripts necessarios
 COPY bot_telegram.py /app/
+COPY tts_direct.py /app/
+COPY baixar_v1.py /app/
+COPY clipar_v1.py /app/
 
 # Create necessary directories
 RUN mkdir -p /app/jobs /app/temp
